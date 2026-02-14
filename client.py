@@ -33,7 +33,7 @@ import requests
 class FoundationStereoClient:
     """Client SDK for the TidyBot FoundationStereo Depth Estimation Service."""
 
-    def __init__(self, base_url: str = "http://localhost:8001", timeout: float = 120.0):
+    def __init__(self, base_url: str = "http://localhost:8003", timeout: float = 120.0):
         """
         Args:
             base_url: URL where the FoundationStereo service is hosted.

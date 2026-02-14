@@ -8,6 +8,9 @@ import io
 import os
 import sys
 import time
+
+# Disable xformers (use PyTorch native SDPA instead) to avoid version conflicts
+os.environ["XFORMERS_DISABLED"] = "1"
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -47,7 +50,7 @@ def load_model():
     MODEL_CFG = cfg
 
     model = FoundationStereo(cfg)
-    ckpt = torch.load(CKPT_DIR, map_location="cpu")
+    ckpt = torch.load(CKPT_DIR, map_location="cpu", weights_only=False)
     model.load_state_dict(ckpt["model"])
     model.to(DEVICE)
     model.eval()
@@ -223,4 +226,4 @@ async def depth(request: DepthRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8003)
