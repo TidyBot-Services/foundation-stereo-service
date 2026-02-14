@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+torch>=2.4.0
+torchvision>=0.19.0
+numpy<2
+opencv-contrib-python
+Pillow
+omegaconf
+timm
+einops
+imageio
+scikit-image
+albumentations
+huggingface-hub
+requests
