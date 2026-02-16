@@ -2,68 +2,64 @@
 TidyBot FoundationStereo Service — Python Client SDK
 
 Usage:
-    from client import FoundationStereoClient
+    from services.foundation_stereo.client import FoundationStereoClient
 
-    client = FoundationStereoClient("http://<backend-host>:8001")
-
-    # Check service health
-    health = client.health()
-    print(health)
-
-    # Run stereo depth estimation
-    result = client.depth(
-        left_image="left.png",
-        right_image="right.png",
-        focal_length=382.5,  # pixels
-        baseline=0.055,      # meters
-    )
-    print(f"Depth shape: {result['depth'].shape}")
-    print(f"Inference: {result['inference_ms']:.1f} ms")
+    client = FoundationStereoClient()
+    result = client.depth(left_bytes, right_bytes, focal_length=382.5, baseline=0.055)
+    print(f"Depth shape: {result['depth'].shape}, inference: {result['inference_ms']:.1f}ms")
 """
 
 import base64
 import io
+import json
+import urllib.request
+import urllib.error
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
-import requests
 
 
 class FoundationStereoClient:
     """Client SDK for the TidyBot FoundationStereo Depth Estimation Service."""
 
-    def __init__(self, base_url: str = "http://localhost:8003", timeout: float = 120.0):
-        """
-        Args:
-            base_url: URL where the FoundationStereo service is hosted.
-            timeout: Request timeout in seconds (stereo matching can be slow).
-        """
-        self.base_url = base_url.rstrip("/")
+    def __init__(self, host: str = "http://158.130.109.188:8003", timeout: float = 120.0):
+        self.host = host.rstrip("/")
         self.timeout = timeout
 
+    def _post(self, path: str, payload: dict) -> dict:
+        data = json.dumps(payload).encode()
+        req = urllib.request.Request(
+            f"{self.host}{path}", data=data,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            return json.loads(resp.read())
+
+    def _get(self, path: str) -> dict:
+        req = urllib.request.Request(f"{self.host}{path}")
+        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            return json.loads(resp.read())
+
     def health(self) -> dict:
-        """
-        Check service health and GPU status.
+        """Check service health and GPU status."""
+        return self._get("/health")
 
-        Returns:
-            dict with keys: status, device, gpu_name, gpu_memory_mb, model_loaded, checkpoint, valid_iters
-        """
-        r = requests.get(f"{self.base_url}/health", timeout=self.timeout)
-        r.raise_for_status()
-        return r.json()
-
-    def _encode_image(self, image) -> str:
+    @staticmethod
+    def _encode_image(image) -> str:
         """Encode image to base64 from file path, bytes, numpy array, or pass through if already base64."""
         if isinstance(image, np.ndarray):
             import cv2
             _, buf = cv2.imencode(".png", image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
             return base64.b64encode(buf.tobytes()).decode()
         elif isinstance(image, (str, Path)):
-            return base64.b64encode(Path(image).read_bytes()).decode()
+            p = Path(image)
+            if p.exists():
+                return base64.b64encode(p.read_bytes()).decode()
+            return image
         elif isinstance(image, bytes):
             return base64.b64encode(image).decode()
-        return image  # assume already base64
+        return image
 
     @staticmethod
     def _decode_numpy(b64: str) -> np.ndarray:
@@ -88,26 +84,19 @@ class FoundationStereoClient:
         Run stereo depth estimation on a rectified image pair.
 
         Args:
-            left_image: Left rectified image — file path (str/Path), raw bytes, numpy array (HxWx3 RGB), or base64.
-            right_image: Right rectified image — same formats as left_image.
-            focal_length: Focal length in pixels (fx from camera intrinsics).
+            left_image: Left rectified image — file path, raw bytes, numpy array (HxWx3 RGB), or base64.
+            right_image: Right rectified image — same formats.
+            focal_length: Focal length in pixels.
             baseline: Stereo baseline in meters.
-            valid_iters: Number of GRU iterations (default 32). Higher = better quality, slower.
-            scale: Downscale factor (<=1.0). Useful for faster inference on large images.
-            hiera: Use hierarchical inference for high-res images (>1K).
+            valid_iters: Number of GRU iterations.
+            scale: Downscale factor (<=1.0).
+            hiera: Use hierarchical inference for high-res images.
             return_disparity: Include disparity map in response.
             return_depth: Include metric depth map in response.
-            return_vis: Include colorized disparity visualization (PNG) in response.
+            return_vis: Include colorized disparity visualization (PNG).
 
         Returns:
-            dict with keys:
-                - disparity: np.ndarray (HxW, float32) — disparity in pixels (if requested)
-                - depth: np.ndarray (HxW, float32) — depth in meters (if requested)
-                - vis: bytes — PNG image of colorized disparity (if requested)
-                - height: int
-                - width: int
-                - inference_ms: float
-                - device: str
+            Dict with depth (np.ndarray HxW float32 meters), disparity (np.ndarray), inference_ms.
         """
         payload = {
             "left_image": self._encode_image(left_image),
@@ -121,9 +110,7 @@ class FoundationStereoClient:
             "return_depth": return_depth,
             "return_vis": return_vis,
         }
-        r = requests.post(f"{self.base_url}/depth", json=payload, timeout=self.timeout)
-        r.raise_for_status()
-        data = r.json()
+        data = self._post("/depth", payload)
 
         result = {
             "height": data["height"],
@@ -131,14 +118,12 @@ class FoundationStereoClient:
             "inference_ms": data["inference_ms"],
             "device": data["device"],
         }
-
         if data.get("disparity"):
             result["disparity"] = self._decode_numpy(data["disparity"])
         if data.get("depth"):
             result["depth"] = self._decode_numpy(data["depth"])
         if data.get("vis"):
             result["vis"] = base64.b64decode(data["vis"])
-
         return result
 
     def depth_from_realsense(
@@ -151,13 +136,6 @@ class FoundationStereoClient:
     ) -> dict:
         """
         Convenience method for Intel RealSense D435/D455 cameras.
-
-        Args:
-            left_image: Left IR or rectified RGB image.
-            right_image: Right IR or rectified RGB image.
-            fx: Focal length in pixels (default: D435 at 640x480).
-            baseline: Stereo baseline in meters (default: D435 ~55mm).
-            **kwargs: Additional arguments passed to depth().
 
         Returns:
             Same as depth().
