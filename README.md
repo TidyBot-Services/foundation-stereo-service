@@ -83,10 +83,12 @@ Run stereo depth estimation on a rectified image pair.
 
 ## Python Client SDK
 
-```python
-from client import FoundationStereoClient
+No `requests` dependency — the client uses Python stdlib (`urllib`). Only `numpy` is needed for array decoding.
 
-client = FoundationStereoClient("http://192.168.1.100:8001")
+```python
+from service_clients.foundation_stereo.client import FoundationStereoClient
+
+client = FoundationStereoClient()  # default: http://158.130.109.188:8003
 
 # Basic usage
 result = client.depth(
