@@ -2,7 +2,7 @@
 TidyBot FoundationStereo Service — Python Client SDK
 
 Usage:
-    from services.foundation_stereo.client import FoundationStereoClient
+    from service_clients.foundation_stereo.client import FoundationStereoClient
 
     client = FoundationStereoClient()
     result = client.depth(left_bytes, right_bytes, focal_length=382.5, baseline=0.055)
