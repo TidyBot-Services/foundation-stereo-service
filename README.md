@@ -10,7 +10,7 @@ Accepts a pair of rectified stereo images and returns dense disparity and/or met
 # Start the service
 cd /home/qifei/foundation-stereo-service
 python main.py
-# Runs on http://0.0.0.0:8001
+# Runs on http://0.0.0.0:8003
 ```
 
 ## API Reference
